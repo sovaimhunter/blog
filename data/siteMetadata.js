@@ -6,7 +6,7 @@ const siteMetadata = {
   description: 'Vale 的个人博客',
   language: 'en-us',
   theme: 'system', // system, dark or light
-  siteUrl: 'http://localhost:3000',
+  siteUrl: 'https://blog-three-kappa-98.vercel.app',
   siteRepo: '',
   siteLogo: '/static/images/social-banner.png',
   socialBanner: '/static/images/social-banner.png',
