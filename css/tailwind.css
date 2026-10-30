@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+.task-list-item::before {
+  @apply hidden;
+}
+
+.task-list-item {
+  @apply list-none;
+}
+
+.footnotes {
+  @apply mt-12 border-t border-gray-200 pt-8 dark:border-gray-700;
+}
+
+.data-footnote-backref {
+  @apply no-underline;
+}
+
+.csl-entry {
+  @apply my-5;
+}
+
+/* https://stackoverflow.com/questions/61083813/how-to-avoid-internal-autofill-selected-style-to-be-applied */
+input:-webkit-autofill,
+input:-webkit-autofill:focus {
+  transition:
+    background-color 600000s 0s,
+    color 600000s 0s;
+}
+
+.katex-display {
+  overflow: auto hidden;
+}
+
+.content-header-link {
+  opacity: 0;
+  margin-left: -24px;
+  padding-right: 4px;
+}
+
+.content-header:hover .content-header-link,
+.content-header-link:hover {
+  opacity: 1;
+}
+
+.linkicon {
+  display: inline-block;
+  vertical-align: middle;
+}
+
+@layer components {
+  /* Table of Contents styling */
+  .toc {
+    @apply sticky top-16 hidden h-0 w-[calc(50vw-50%-4em)] break-words text-xs xl:block;
+  }
+
+  /* Right-aligned TOC */
+  .tocr {
+    @apply sticky top-16 ml-auto hidden h-0 break-words text-left text-sm xl:block;
+  }
+
+  .toc ul li a {
+    @apply !no-underline transition-all duration-200;
+  }
+
+  .tocr ul li a {
+    @apply !no-underline transition-all duration-200;
+  }
+
+  /* Highlights the current section in the viewport within the TOC */
+  .active-header {
+    @apply font-bold text-primary-400;
+  }
+}
