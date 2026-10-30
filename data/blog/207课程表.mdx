@@ -43,3 +43,40 @@ summary: 207课程表的一种更好理解的解法
 最后判断 `q.length === numCourses`：所有课都进过队列，说明都能学完，返回 true；否则说明存在环，返回 false。
 
 以上面的例子走一遍：一开始只有 0 的入度为 0，q = [0]；取出 0，1 和 2 的入度变为 0，入队；取出 1，3 的入度变为 0，入队；取出 2、3，没有新的课。最终 q = [0, 1, 2, 3]，长度等于 4，返回 true。
+
+<details>
+<summary>点击查看完整代码</summary>
+
+```js
+/**
+ * @param {number} numCourses
+ * @param {number[][]} prerequisites
+ * @return {boolean}
+ */
+var canFinish = function (numCourses, prerequisites) {
+  const g = Array.from({ length: numCourses }, () => [])
+  const inDe = new Array(numCourses).fill(0)
+  for (const [a, b] of prerequisites) {
+    g[b].push(a)
+    inDe[a]++
+  }
+  const q = []
+  for (let i = 0; i < inDe.length; i++) {
+    if (inDe[i] === 0) q.push(i)
+  }
+
+  let head = 0
+  while (head < q.length) {
+    const startNode = q[head++]
+    for (const item of g[startNode]) {
+      inDe[item]--
+      if (inDe[item] === 0) {
+        q.push(item)
+      }
+    }
+  }
+  return q.length === numCourses
+}
+```
+
+</details>
