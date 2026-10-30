@@ -174,17 +174,15 @@ export default function ListLayoutWithTags({
               {displayPosts.map((post) => {
                 const { path, date, title, summary, tags } = post
                 return (
-                  <Link href={`/${path}`} key={path}>
-                    <li className=" transform cursor-pointer rounded-lg px-6 py-5 transition-transform hover:scale-101 hover:bg-[#fcfbfa] dark:hover:bg-[#2b2e40]">
+                  <li
+                    key={path}
+                    className=" transform cursor-pointer rounded-lg transition-transform hover:scale-101 hover:bg-[#fcfbfa] dark:hover:bg-[#2b2e40]"
+                  >
+                    <Link href={`/${path}`} className="block px-6 py-5">
                       <article className="group flex flex-col space-y-1 xl:space-y-0">
                         <div>
-                          <h2 className="text-xl font-bold leading-8 tracking-tight">
-                            <Link
-                              href={`/${path}`}
-                              className="text-gray-900 group-hover:text-primary-500 dark:text-gray-100"
-                            >
-                              {title}
-                            </Link>
+                          <h2 className="text-xl font-bold leading-8 tracking-tight text-gray-900 group-hover:text-primary-500 dark:text-gray-100">
+                            {title}
                           </h2>
                           <dl>
                             <dt className="sr-only">Published on</dt>
@@ -197,8 +195,8 @@ export default function ListLayoutWithTags({
                           </div>
                         </div>
                       </article>
-                    </li>
-                  </Link>
+                    </Link>
+                  </li>
                 )
               })}
             </ul>

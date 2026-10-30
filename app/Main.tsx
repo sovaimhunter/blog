@@ -17,8 +17,11 @@ export default function Home({ posts }) {
           {posts.slice(0, MAX_DISPLAY).map((post) => {
             const { slug, date, title, summary, tags } = post
             return (
-              <Link key={slug} href={`/blog/${slug}`}>
-                <li className="transform cursor-pointer   transition-transform hover:scale-101 hover:bg-[#fcfbfa] dark:hover:bg-[#2b2e40]">
+              <li
+                key={slug}
+                className="transform cursor-pointer   transition-transform hover:scale-101 hover:bg-[#fcfbfa] dark:hover:bg-[#2b2e40]"
+              >
+                <Link href={`/blog/${slug}`} className="block">
                   <article className="group">
                     <div className="mb-1 space-y-2 rounded-lg px-3 py-5  xl:col-span-3">
                       <h2 className="text-xl font-bold leading-8 tracking-tight group-hover:text-primary-500">
@@ -36,8 +39,8 @@ export default function Home({ posts }) {
                       </div>
                     </div>
                   </article>
-                </li>
-              </Link>
+                </Link>
+              </li>
             )
           })}
         </ul>
