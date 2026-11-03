@@ -1,0 +1,65 @@
+---
+title: React 面试
+date: '2026-11-03'
+tags: [interview]
+summary: React 八股题大全大集
+---
+
+完整的原理讲解见 [Fiber架构](/blog/Fiber)。
+
+本篇文章主要是为了回答八股题：对 Fiber 的理解，它解决了什么问题？
+
+# 说说你对 Fiber 的理解，它解决了什么问题？
+
+## 重点（必须讲出）
+
+### 主线：问题 → 两个手段
+
+- 问题：递归停不下来，长任务占住主线程
+- 手段：可中断渲染 + 优先级
+
+### 补充：数据结构，对应到这两个手段上
+
+- `child` / `sibling` / `return` → 递归改成循环，进度存在节点上 → 支撑**可中断**
+- `lanes` → 支撑**优先级**
+- `alternate` → 引出双缓存（见下文 Unit of Work）
+- 其余字段：`type`、`key`、`stateNode`、props、`memoizedState`、`flags`
+
+### 展开一：什么时候停、怎么判断该停
+
+- 两种情况会停：时间片用完（约 5ms）；高优先级更新插队，必要时丢弃重来
+- 怎么判断：React 不问浏览器什么时候空闲，自己用 `performance.now()` 计时
+- 原生 API：`requestIdleCallback`，React 没用（兼容性差、触发不稳定）
+- 停下以后：用 `MessageChannel` 发一个宏任务回来继续（`setTimeout` 嵌套多层会有 4ms 的最小延迟）
+
+### 展开二：Unit of Work 怎么走，能停在哪
+
+- workLoop 一个节点一个节点地调用 `performUnitOfWork`
+- beginWork 往下走：diff，通过 `alternate` 复用节点，生成子 Fiber
+- completeWork 往上走：创建 DOM、收集 `flags`，然后找 sibling，没有就回到 return
+- 每做完一个 unit 检查一次 `shouldYield()`，只能停在两个节点之间
+- 一路构建的是 workInProgress 树，屏幕上的 current 树不受影响，这就是双缓存
+- Commit 阶段同步执行、不能停，完成后把 `root.current` 指向新树
+- 边界：只有并发更新才走可中断的 workLoop，Legacy 模式下是同步的
+
+一句话版：**Fiber 让渲染「能停」，优先级决定「谁先」，目的是不卡主线程。**
+
+## 完整回答（口述版）
+
+**【定义】**
+Fiber 是 React 16 重写的协调架构，每个组件对应一个 Fiber 节点，它既是一种数据结构，也是一个工作单元。
+
+**【问题】**
+之前的 Stack Reconciler 是递归 diff，进度都在调用栈上，开始了就必须一口气做完。JS 又是单线程的，组件树一大，更新就会长时间占住主线程，超过一帧的时间就会掉帧，用户输入也得不到响应。
+
+**【原理一：可中断】**
+Fiber 用 `child`、`sibling`、`return` 三个指针把节点连起来，把递归改成了循环遍历。进度不在调用栈上，而是存在 Fiber 节点里，用一个指针记住做到哪儿。每处理完一个节点就检查一下时间片用完没有，用完了就把主线程还给浏览器，下次从记住的节点继续。
+
+**【原理二：优先级】**
+光能停还不够，还要知道停下来先做什么。所以每个更新都带优先级，React 17 以后用 Lanes 表示。高优先级的更新比如用户输入，可以打断正在进行的低优先级渲染，必要时把做了一半的工作丢掉重来。可中断是前提，优先级决定谁打断谁。
+
+**【边界】**
+只有 Render 阶段可以中断，Commit 阶段要改真实 DOM，必须同步一次做完，否则用户会看到渲染了一半的界面。而且 Fiber 只是让中断成为可能：Legacy 模式下渲染仍然是同步的，要到 React 18 的 `startTransition` 这类并发特性，才会真正进行时间切片。
+
+**【加分】**
+Fiber 还是并发渲染的基础，Suspense、`useTransition`、`useDeferredValue` 都建立在它之上。另外它用了双缓存：current 树和 workInProgress 树，在内存里构建好新树再一次性切换。
