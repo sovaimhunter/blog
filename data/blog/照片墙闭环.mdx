@@ -1,0 +1,262 @@
+---
+title: EndOfYear 照片墙
+date: '2026-10-31'
+tags: [Project]
+summary: 项目闭环
+---
+
+# 简历内容
+
+为解决照片墙大数据量连续拖拽时布局计算阻塞主线程及元素相互遮挡的问题，将布局计算下沉至
+Web Worker，以网格坐标为确定性种子预分配位置使布局稳定复用，以旋转碰撞检测 + 重叠面积占比来剔除重叠率
+过高的格子，配合位置缓存、可视区缓冲，有效避免主线程卡顿。
+
+## 宏量
+
+### 面试题目
+
+1. 照片墙用网格坐标做种子分配位置，不同设备上网格怎么保证显示正确？
+   1. 种子只和坐标有关
+   2. 卡片宽度按屏幕分档
+   3. 偏移范围和重叠阈值按设备区分
+   4. 首屏按屏幕比例定位
+2. 布局计算放到 Web Worker，传输大量数据时有没有碰到卡顿或性能瓶颈？1.主要传输的是当前位置、屏幕尺寸、照片总数、和下一张图的指针和两个 Map，一个是存用哪张图片，一个存图片的旋转角度和图片编号。2.开发过程中，没发现有卡顿和性能瓶颈的情况。主要做的是减少计算次数和传输次数。
+   1。 拖动时只改容器的`transform`，不是每次移动都计算。超过 300- 400px 强制重新渲染，停下后防抖再触发一次。2. 发给 Worker 前算参数指纹，指纹没变就跳过，如果 Worker 还在计算新请求会直接丢掉。/
+3. 如果照片墙足够大、图片非常多，你会用哪些方法优化图片和其他元素的渲染？
+   1. 元素数量：只加载缓存区和屏幕显示区的图片，单次最多 4-800 张。并且拖动时不走 React，直接改`transform`,布局
+      更新时才更新卡片
+   2. 图片加载：使用 TOS 的图片参数取缩略图，不加载原图。并且做了图片数据分页，每页 20 张，分配完才加载下一页
+   3. 解码和绘制：图片用`decoding="async`,尽量不让解码阻塞主线程。
+
+## 从 0 开始解读
+
+### 1. 拖动
+
+#### 1.初始设计
+
+`deltaX`= 当前鼠标位置 - 按下时的鼠标位置
+`dragOffset.current.x _ y` 容器位置
+
+第一次设计为，监听`MouseDown`事件，触发时，记录鼠标起点、容器当时的位置。 这样就可以计算出 后续位置 = 容器起点 + 鼠标移动量
+然后用`MouseMove`事件也有监听，使用`e.clientX - dragStartPos.current.x` 这样算出 `deltaX，deltaY`的移动距离，再勾股定理算出距离。
+如果`distance`小于 常量`DRAG_THRESHOLD`，就不算拖动。大于就重新赋值`setDragOffset({
+          x: dragStartOffset.current.x + deltaX,
+          y: dragStartOffset.current.y + deltaY,
+        });` 重新渲染。
+
+组价：
+
+```jsx
+    <div
+            className={styles.scatteredContainer}
+            style={{
+              // 【讲解】画面是这样动的：state 变 → React 渲染 → 把新位置写进容器的 transform。
+              // 【讲解】所有照片都在这个容器里，所以移动容器就等于移动所有照片
+              transform:`translate(${dragOffset.x}px, ${dragOffset.y}px)`,
+              willChange: isActuallyDragging ? "transform" : "auto",
+            }}
+          >
+```
+
+#### 2. 一帧只写一次state
+
+使用 rAF 让React 渲染的触发变成每帧一次
+
+使用`useRef`将最新的位置存进`ref`不写进 State，
+
+```tsx
+const scheduleOffsetUpdate = useCallback((newOffset: DragOffset) => {
+  // 【讲解】RAF 的第二种用法：合并。每个事件只把最新位置存进 ref，不写 state
+  pendingOffset.current = newOffset
+  // 【讲解】这一帧已经预约过就不再预约。所以一帧内来 5 个事件，也只执行一次回调
+  if (rafId.current === null) {
+    rafId.current = requestAnimationFrame(() => {
+      if (pendingOffset.current) {
+        // 【讲解】到了这一帧才写 state，而且只用最后一个位置。注意：还是写 state，还是走 React
+        setDragOffset(pendingOffset.current)
+        pendingOffset.current = null
+      }
+      rafId.current = null
+    })
+  }
+}, [])
+```
+
+再将第一版的`handleMouseMove`的回调里的`setDragOffset`换成`scheduleOffsetUpdate`保证一帧只渲染一次。
+
+#### 3. 让画面位置不再经过 React
+
+使用`updateDOMTransform`直接修改修改`containerRef.current.style`。使用`transform`移动。
+`scheduleOffsetUpdate`这里把`setDragOffset`变成直接改 DOM，然后防抖触发`scheduleOffsetUpdate`来`setDragOffset`同步 React 。
+因此，应该从`realTimeOffset.current`上取到最新的容器位置。
+
+```按下
+dragStartPos.x = 100，dragStartOffset.x = 720，realTimeOffset.x = 720
+
+鼠标移到 110（超过 5px，算作拖动）
+deltaX = 110 - 100 = 10
+新位置 = 720 + 10 = 730
+pendingOffset.x = 730，并预约下一帧
+
+同一帧内鼠标又移到 112
+deltaX = 12，新位置 = 732
+pendingOffset.x 被覆盖成 732（已预约，不再预约）
+
+下一帧执行
+transform = translate(732px, ...)
+realTimeOffset.x = 732
+检查：732 离 lastLayoutUpdatePos.x（720）只差 12，不到 400，不重算
+pendingOffset 和 rafId 清空
+
+一直拖到 1130
+离 720 的距离是 410，超过 400（照片超过 100 张时的阈值）
+lastLayoutUpdatePos.x = 1130，dragOffset.x = 1130，触发重算
+```
+
+### 2. 补照片时机
+
+#### 1. 拖动时不算布局，松手才算
+
+`useDrag.ts`
+使用节流，效果是 拖动中`throttleOffset`不变，松手才更新
+
+`useScatteredLayout`
+`bufferZone`为 ` Math.max(viewportWidth, viewportHeight) * 1.5;`
+并用屏幕位置和缓冲区，算出哪些格子需要处理，用 `useMemo`依赖 `throttledOffset`来缓存结果
+
+#### 2. 改用实时位置，每次位置变换都算
+
+`useDrag.ts`
+将`throttledOffset` 改为React当前使用的`DragOffset`
+
+`useScatteredLayout`
+用 `useMemo`依赖 `DragOffset`来缓存结果，React 更新就重算
+
+#### 3. 只在该更新的时候更新
+
+`useDrag`：
+函数`checkBoundaryAndUpdateLayout`：
+使用`distance`算偏移距离，如果 > 300px 马上算。因此`setDragOffset`的意义也变了，变成一个布局重算触发器。
+
+`scheduleOffsetUpdate`更新 1. 调用`checkBoundaryAndUpdateLayout`先看看需不需要重新计算，2. 防抖，每次移动都重新倒计时，停手 160ms 才重算。
+
+### 3. 是否重叠
+
+### 4. 每个放哪张图片
+
+#### 1. 记住每个格子放哪张照片
+
+`useScatteredLayout.ts`:
+
+函数`gridItemForGrid`负责分发图片。
+`useRef`缓存 `gridItemMapRef`、 `nexItemIndexRef`
+
+`gridItemMapRef` 为一个 `Map`, `key` 为 `${gridX}_${gridY}`，`value` 为图片。
+
+如果当前格子有缓存直接返回图片，没有就
+
+1. 遍历`masterListLnegth`找下一张没用过的照片。判断是否用过： 遍历`gridItemMapRef`看是否有 `value`为当前的图片
+2. 如果全部图片都用过了，就加载下一页数据。
+
+#### 2. 加位置缓存，命中直接用
+
+`gridPositionCacheRef` 存位置信息包括
+
+```
+if (gridPositionCacheRef.current.get(gridKey)) {
+          // ✅ 缓存命中，直接使用缓存的位置
+          cacheHits++;
+          items.push({
+            itemId: cachedPosition.itemId,
+            uniqueId: gridKey,
+            absoluteX: cachedPosition.absoluteX,
+            absoluteY: cachedPosition.absoluteY,
+            rotate: cachedPosition.rotate,
+          });
+}
+```
+
+再将`allPlacedPositions`
+
+```ts
+// 将缓存的位置也加入已放置位置，用于后续的重叠检测
+allPlacedPositions.push({
+  x: cachedPosition.absoluteX,
+  y: cachedPosition.absoluteY,
+  width: itemWidth,
+  height: itemHeight,
+  rotate: cachedPosition.rotate,
+})
+```
+
+#### 3.缓存命中也要重叠检测
+
+在push 前`checkOverlap`检查一下是否重叠
+
+### 5.Worker
+
+#### 1. 主线程使用Worker
+
+```
+ workerRef.current = new Worker(
+      new URL("./scatteredLayoutWorker.ts", import.meta.url),
+      { type: "module" }
+    );
+```
+
+`workerRef.current.onMessage`收到消息后就复制计算的返回结果，重建 Map；
+结果主要包括
+
+```
+gridItemMapRef.current = new Map(result.gridItemMap);
+        nextItemIndexRef.current = result.nextItemIndex;
+        gridPositionCacheRef.current = new Map(result.gridPositionCache);
+        allItemsUsedRef.current = result.allItemsUsed;
+
+```
+
+然后`setInfiniteItems`触发 React 渲染，把新卡片摆出来,并标记`pendingCalculationRef.current`为空
+
+`useScatteredLayout`:
+生成参数指纹，避免重复计算，40px 才触发计算，配合大缓冲区减少计算频率
+
+```ts
+const paramsFingerprint = `${Math.round(dragOffset.x / roundFactor)}_${Math.round(dragOffset.y / roundFactor)}_${randomSeed}_${masterListLength}_${hasLoadedAll}`
+```
+
+参数没变化就跳过计算。
+
+如果 Worker 此时还在计算，就直接丢弃，放弃排队。
+
+```ts
+// 准备 Worker 输入数据
+const input: WorkerInput = {
+  type: 'CALCULATE_LAYOUT',
+  payload: {
+    masterListLength,
+    dragOffsetX: dragOffset.x,
+    dragOffsetY: dragOffset.y,
+    randomSeed,
+    viewportWidth: window.innerWidth,
+    viewportHeight: window.innerHeight,
+    isMobile,
+    itemWidth,
+    hasLoadedAll,
+    // 【讲解】缓存整份转数组发过去，缓存越大这里越慢
+    gridItemMap: Array.from(gridItemMapRef.current.entries()),
+    nextItemIndex: nextItemIndexRef.current,
+    gridPositionCache: Array.from(gridPositionCacheRef.current.entries()),
+  },
+}
+```
+
+这个上述都是`useCallback`包裹住的`cancelAnimationFrame`，deps为`[
+dragOffset.x,
+dragOffset.y,
+randomSeed,
+masterListLength,
+hasLoadedAll,
+isMobile,
+itemWidth,
+]`
+保证一帧只渲染一次。
