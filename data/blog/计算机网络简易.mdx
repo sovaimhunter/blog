@@ -1,0 +1,255 @@
+---
+title: 计算机网络简易
+date: '2026-11-7'
+tags: [Computer Network]
+summary: 简述 计算机网络
+---
+
+# 7 层
+
+## 物理层
+
+物理层是直接和物理介质打交道的。
+物理层的设备网卡，网线，集线器，中继器，调制解调器
+物理层信道
+
+有线信道：明线
+
+指的是类似电线杆上的架空线缆。包括
+
+1. 对称线缆
+
+2. 同轴电缆
+
+3. 光纤
+
+在这一层通过（光、电、无线电波），获取它们对于的传输信号，电压，转换成 01010101 但是数据还未组织，它们的单位为 bit，在这一层主要就是传输比特流。
+
+## 数据链路层
+
+建立逻辑连接、进行硬件地址寻址、差错校验等功能。
+将比特组合成字节进而组合成帧，用 MAC 地址访问介质。
+
+MAC 地址： 每个网卡的唯一标识
+有了MAC 地址就能知道谁是接收者，谁是发送者，并且知道了数据的内容且进行了分组。
+
+## 网络层
+
+比较复杂
+
+主要做了：
+
+1. 寻址：对网络层而言使用 IP 地址来唯一标识互联网上的设备，网络层依靠 IP 地址进行相互通信
+
+2. 路由：在同一个网络中的内部通信并不需要网络层设备，仅仅靠数据链路层就可以完成相互通信，对于不同的网络之间相互通信则必须借助路由器等三层设备，这一层经常被叫做数据包。
+
+## 传输层
+
+主要定义 端口号 ，控流以及校验，并有我们熟知的 TCP UDP
+
+TCP 是面向连接的协议并且 TCP 是可靠的。
+
+因为 TCP 有三次握手建立连接和 四次挥手关闭连接，但是这样会降低速度。
+
+UDP 具有较好的实时性，效率比 TCP 高。
+
+UDP 没有三次握手，四次挥手，不稳定。但是速度快 常用于指标，游戏
+
+## 会话层
+
+## 表示层
+
+主要做 安全、压缩，算是程序在网络中的一个翻译官。
+
+1. 安全： 在你的数据发送之前进行加密，在接收者的标识层进行解密
+2. 表示层还会对图片文件等格式进行解码和编码， 例如 JEPG 、 ASCII 图片。
+
+## 应用层
+
+开发者经常使用的层。
+
+HTTP请求、域名系统 DNS、邮件协议 SMTP、WebSocket 长连接等
+
+# 三次握手
+
+1. Seq 序列号
+2. ack 确认号
+3. ACK 确认序列号有效
+4. SYN 发起新连接
+
+客户端 SYN : seq --> 服务端
+\<-- SYN 服务端seq + ACK = 客户端seq + 1
+--> ACK seq = 客户端seq + 1 ack = 服务端 seq + 1
+
+# 四次挥手
+
+1. FIN 完成
+
+客户端 [ESTABLISHED] FIN seq = x -> 服务端 [ESTABLISHED]
+客户端 [FIN_WAIT_1] \<- ACK ack = x + 1 服务端[CLOSE_WAIT]
+客户端[FIN_WAIT_2] \<- FIN ACK seq = w ack = x + 1 服务端[LAST_ACK]
+客户端 [TIME_WAIT 超时等待状态 2MSL] ACK seq = x + 1 ack = w + 1 -> 服务端[LAST_ACK]
+客户端 [CLOSE] 服务端[CLOSE]
+
+# 浏览器输入URL发生了什么
+
+## URL 组成
+
+1. 访问协议 + 域名 + 端口号 + 目录名 + 文件名
+
+## 键入
+
+## DNS 查询
+
+1. 浏览器自身 DNS
+2. 操作系统 DNS
+3. 本地 hosts 文件名
+4. 向域名服务器发送请求
+   1. 本地 DNS 服务器
+   2. 根域名服务器
+   3. 顶级域名服务器
+   4. 权威域名服务器
+
+## 三次握手
+
+## 发送请求
+
+1. 请求方法： GET POST PUT DELETE PATCH ...
+
+   1. [Options] 请求被称为 遇见请求，CORS 机制的一部分 。包含以下信息
+
+      1. `Origin`: 表示请求来源的域名
+      2. `Access-Control-Request-Method` ： 表示实际请求将使用的 HTTP 方法 3.`Access-Control-Request-Headers`： 表示实际请求将携带哪些自定义头部字段
+
+   2. 服务器需要在响应头中返回一些`CORS`相关的信息，
+      1. `Access-Control-Allow-Origin`: 表示哪些域名可以进行跨域访问
+      2. `Access-Control-Allow-Methods`： 表示允许 哪些 HTTP 方法
+      3. `Access-Control-Allow-Headers`： 表示允许哪些头部字段
+
+2. 缓存
+
+   1. 强缓存
+      指的是让浏览器强制缓存服务器提供的资源
+
+      1. `Service Worker`
+      2. 一般使用`disk cache`
+         1. `Cache-Control : max-age = 3153600`
+         2. `Expires : Wed, 21 Oct 2025 07:29:00 GMT`
+      3. `memory  cache`
+      4. `push cache`
+
+   2. 协商缓存
+      1. `Last-Modified` ：最后被修改时间。服务端返回的时间。发给服务端请求时为`If-Modified-Since`，用作对比
+      2. `ETag` 版本号、文件哈希等，用作与服务器相比
+
+## 四次挥手
+
+## 浏览器渲染
+
+1. 浏览器主线程
+
+   1. 解析 HTML
+   2. 构建 CSSOM 树
+   3. DOM 树
+   4. 布局树
+   5. 层叠树
+   6. 生成绘制指令
+
+2. 合成线程
+   1. 分块
+   2. 光栅化
+   3. 画
+
+# 分发网络 CDN
+
+主要作用在 DNS 寻址过程中，网站把这个域名用 CNAME 指向 CDN 服务商的域名，让其不访问权威域名服务器而是交给 CDN 调度网络 (GSLB).
+
+GLSB 会根据用户位置、运营商、节点负载等，返回一个最合适 的边缘节点
+
+浏览器拿到 IP，和边缘节点建立连接、发请求
+
+节点有缓存就直接返回；没有就回源，从源站拿到资源后缓存起来再返回
+
+1. 加速访问
+2. 减轻源站压力
+3. 提高可用性
+
+# 跨域
+
+有四种解决方法
+
+什么是跨域？
+浏览器请求时， 协议、域名、端口 有一个不同就是跨域。
+
+Curl 命令等不受限制。
+
+## JSONP
+
+原理：通过`script`的src 不受同源策略的限制，可以跨域请求数据，但是只能发送 Get 请求
+
+缺点：只能发送 GET 请求，不安全，不易维护
+
+后端返回的是一个函数 但是这个函数是在前端定义的，他会把值注入到这个函数的参数里
+
+```js
+const jsonp = (name) => {
+  let script = document.createElement('script')
+  script.src = 'http://localhost:3000/api/jsonp?callback=' + name
+  document.body.appendChild(script)
+  return new Promise((resolve) => {
+    window[name] = (data) => {
+      resolve(data)
+    }
+  })
+}
+
+jsonp(`callback${new Date().getTime()}`).then((res) => {
+  console.log(res)
+})
+```
+
+![JSONP 请求流程](/static/images/ComputerNetwork/image.png)
+
+## 前端解决 代理 Dev
+
+这里需要用到构建工具，比如`Vite、Webpack、Rollup`等。
+
+```js
+export default defineConfig({
+  server: {
+    proxy: {
+      '/api': {
+        target: 'http://localhost:3000',
+        changeOrigin: true,
+        // rewrite:(path)=>path.replace(/^\/api/,'')
+      },
+    },
+  },
+})
+```
+
+实现了转发。但是只对开发环境有效，生产环境需要配置`Nginx`。
+
+## 后端解决 设置请求头
+
+只要后端开启即可，但是危险。
+
+```js
+app.get('/api/json', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  // res.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5500')
+  res.json({ name: 'xiaoman' })
+})
+```
+
+但是我们可以指定允许的跨域请求。
+
+## 运维端解决 Nginx 代理
+
+给 Nginx 配置一个代理即可
+
+```nginx
+location /api {
+    proxy_pass http://172.24.176.1:3000;
+}
+```
