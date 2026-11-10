@@ -1,0 +1,30 @@
+---
+title: Vite8简述
+date: '2026-11-9'
+tags: [Architect]
+summary: 简述 Vite 8
+---
+
+# 发展阶段
+
+1. grunt, gulp, 繁琐的任务自动化 task
+2. webpack 模块化打包构建的先驱 （rollup, parcel）
+3. vite, bundleless 方案，借助于浏览器原生 esm 支持
+   1. 开发环境 esbuild (快速启动)
+   2. 生产环境 rollup （生态繁荣、配置化更高）
+4. 字节：RsBuild -> rspack -> rslib -> rspress
+   分支： oxc -> (oxc parser 、 oxc minifier、oxc resolver)-> rolldown + Vite
+
+## Vite 8 新特性与挑战
+
+- 插件生态
+
+#### vite 插件开发
+
+插件的本质是一个函数
+
+插件本质是由插件系统决定的，有 vite 开发、vue 开发者确定插件协议
+
+vue 插件的本质是一个对象，包含 install 方法
+
+废案
