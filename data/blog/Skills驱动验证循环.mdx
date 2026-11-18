@@ -1,0 +1,131 @@
+---
+title: Skills 驱动验证循环
+date: '2026-11-11'
+tags: [Agent]
+summary: Skills 驱动验证循环
+---
+
+# 使用 Skills 在 Claude Code 中构建验证循环
+
+目的： 将手动检查转化为技能，让 Agent 自行闭合反馈闭环。
+
+大多数 Coding Agent 遵循一个循环：
+
+1. User 提出一个修改请求
+2. Agent 收集上下文
+3. 执行操作
+4. 验证结果；有需要就回到步骤 2
+
+验证主要是让 Agent 检查自身工作的结果，Agent 已经能通过观察代码库完成部分验证，比如 TS 的类型检查、代码检查、测试和运行时错误。
+
+Agent 无法完成的部分，就是 User 需要手动检查功能时需要采取的步骤。
+
+但是，这些手动的步骤可以转化为验证循环，在 Claude Code 中，验证循环是一个迭代过程，Claude 在其中检查并尝试修复工作成功。
+
+## 验证循环
+
+验证循环是一个重复的周期，AI 智能体在其中检查自己的工作 - 运行测试、代码检查工具、或自定义检查，并在继续之前修复失败的部分，验证循环可以打包为技能，这样每次会话都会自动应用相同的检查，而无需加载人工记忆。
+
+### 内置验证循环
+
+Claude Code
+
+1. /verify 技能：构建、运行并观察应用程序中的更改。
+
+2. ToolChain: 工具链：Claude 旨在捕获并处理你提供的任何工具（如 linter）的错误代码和警告。一个良好的做法是在 CLAUDE.md 中列出确切的构建和测试命令，这样 Claude 就不必自行推断。
+
+3. 代码审查（研究预览版）：一项托管式多智能体服务，可在你启用的代码仓库中对 PR 自动执行审查。你可以手动修复发现的问题并推送，或通过在发现的问题下评论 @claude 来闭环（前提是你已设置并配置好下方的 GitHub Actions）。
+
+4. Github Actions: 定义一个 Job，调用 claude 并搭配一项验证技能，这样你在本地运行的相同检查在每次推送和 PR 时都会触发。
+
+5. Spec validation: 一个技能,帮助依据仓库中的 markdown 规范验证每项更改，并着手修复违规之处。
+
+6. Rubrics in Claude Managed Agents: 一项托管式智能体服务，允许你使用独立的评分智能体依据评分标准验证结果。失败会自动返回进行返工。
+
+### 编写验证循环
+
+如果你发现，你每次让 Agent 帮你实现一个新的功能时，总会需要你做一些小的纠正。这时候就可以编写验证循环。
+
+如果你觉得自己无法表达清晰，尝试询问 Agent 寻找最佳实践，与你观点的不同，可能恰恰就是你想抓到的东西。
+
+把重复性操作写入 Skills 中是最普遍的方法。可以用 Claude Code 的 `/skill-creator`
+
+```md
+# .claude/skills/verify-log-hygiene/SKILL.md
+
+---
+
+name: verify-log-hygiene
+description: Check that error logs include the request ID and never
+include the request body. Use when the diff touches error handling
+or logging.
+allowed-tools: [Read, Edit, Grep]
+
+---
+
+Read the error-handling paths in the current diff.
+
+For each log call on an error path, confirm it includes the request ID
+and does not pass the request body, headers, or any user-supplied payload.
+
+Report each violation with file:line, then fix it: add the request ID
+where it's missing and strip the payload from the log call.
+```
+
+这就是一个比较简单的skills。
+
+### 检查验证的地方是否匹配
+
+1. Standalone
+   产物存在后自主调用。适用于并非每次都需要执行的横切检查：1. 提交前的安全检查 2. 发起 PR 前的无障碍审计
+   总之就是不是每次变更时都触发的检查，代价是每次调用都需要专门花一轮去做。
+
+如果每次变更都需要运行，那就说明这个检查值得一个永久的位置。
+
+2. Embedded
+   嵌入式，作为一个产出技能的一部分自动触发。属于工作流的一部分，无需单独要求。
+
+   最简单的版本就是在一个技能的主题中追加一行
+
+```markdown
+# .claude/skills/scaffold-component/SKILL.md
+
+---
+
+name: scaffold-component
+description: Scaffold a new React component under src/components/, including the component file, its co-located test, and an index export. Use when the user asks to create a new component.
+allowed-tools: [Read, Write, Edit, Bash, Glob]
+
+---
+
+# Scaffold a new React component
+
+Given a component name (PascalCase), create the following under `src/components/<Name>/`:
+
+1. `<Name>.tsx`: function component with a typed props interface and a default export.
+2. `<Name>.test.tsx`: React Testing Library test that renders the component and asserts it mounts without throwing.
+3. `index.ts`: re-export the default and any named exports.
+
+Follow the patterns in `src/components/Button/` as the reference. Match the import alias style (`@/components/...`) used throughout the codebase.
+
+# code continues...
+
+After creating the component file, run eslint on it and
+address any errors before reporting completion.
+```
+
+这种仅适用于个人编写的技能。内置技能和由插件管理的技能不适用于这种模式；这种技能应该交给链式调用。
+
+3. Chained
+   链式调用也是为无法修改的技能添加的验证的方式，构建一个自定义封装技能，再调用你的节能。
+
+```markdown
+# .claude/skills/safe-refactor/SKILL.md
+
+Run /simplify on the current diff first.
+When /simplify finishes, invoke /verify-no-public-api-changes.
+```
+
+4. on every PR
+
+[Claude官方博客：Building verification loops in Claude Code with skills](!https://claude.com/resources/articles/building-verification-loops-in-claude-code-with-skills)

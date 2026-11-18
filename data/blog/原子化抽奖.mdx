@@ -1,0 +1,48 @@
+---
+title: 原子化抽奖
+date: '2026-11-11'
+tags: [Project]
+summary: 抽奖是否做了防并发
+---
+
+# 26 周年抽奖接口设计
+
+背景： 11/9 面试被问接受是否有做防并发？
+
+我当时的理解：
+MongoDB 并发时，不管多少个并发一起，最后只会有一个修改返回的结果是`modifiedCount = 1`。这样就能防止并发了，但是这是错的。
+
+并且原实现并没有使用
+
+## 清本正源
+
+MongoDB 中，对于一个字段的写操作是原子化的，并发中，如果另一个写操作同步执行，MongoDB 会自动将后来的 写操作变为串行的，而不是同步执行。
+
+也就是一个一个执行。
+
+## 理解
+
+```js
+const award = await AC.findOne({ _id }) // A、B 同时读到 currentAmount = 1
+if (award.currentAmount > 0) {
+  // A、B 都判断通过
+  await AC.updateOne({ _id }, { $inc: { currentAmount: -1 } }) // A、B 都扣成功
+}
+// 结果：currentAmount = -1，发出去 2 份
+```
+
+这种就是经典例子，第二个串行执行的仍然会通过，因为`currentAmount`读到的是旧值。
+
+因此我们应该写成
+
+```js
+updateOne(
+  { _id: hitAward._id, currentAmount: { $gt: 0 } },   // 检查
+  { $inc: { currentAmount: -1, gotAmount: 1 } }       // 修改
+)
+if (!modifiedCount) → 按未中奖返回
+
+
+```
+
+将读写合成成一个原子化操作，保证`currentAmount`读到的一定是新值，而非旧值。
